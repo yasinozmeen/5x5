@@ -1,0 +1,91 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0c0f;
+  --color-bg-deep: #060708;
+  --color-surface: #14161b;
+  --color-surface-2: #1b1e25;
+  --color-line: rgba(255, 255, 255, 0.07);
+  --color-ink: #ededef;
+  --color-muted: #8a8f98;
+  --color-accent: #ff6b35;
+  --color-accent-soft: rgba(255, 107, 53, 0.14);
+  --color-ok: #4ade80;
+  --color-ok-soft: rgba(74, 222, 128, 0.12);
+  --color-warn: #facc15;
+  --color-warn-soft: rgba(250, 204, 21, 0.1);
+
+  --font-display: var(--font-anton), sans-serif;
+  --font-body: var(--font-barlow), sans-serif;
+  --font-num: var(--font-mono), monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(80rem 40rem at 85% -10%, rgba(255, 107, 53, 0.06), transparent 60%),
+    linear-gradient(180deg, var(--color-bg) 0%, var(--color-bg-deep) 100%);
+  min-height: 100dvh;
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Sayı girişlerinde spinner'ları gizle */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Veri sayfası form alanı */
+.alan {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-line);
+  background: var(--color-surface-2);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.875rem;
+  outline: none;
+}
+.alan:focus {
+  border-color: var(--color-accent);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.96);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.pop {
+  animation: pop 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
