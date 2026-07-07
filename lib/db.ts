@@ -46,6 +46,12 @@ function migrate(d: Database.Database) {
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     );
+    -- Web Push abonelikleri (endpoint tekil). Tek kullanıcı ama birden çok
+    -- cihaz/tarayıcı abone olabilir diye endpoint bazlı saklanır.
+    CREATE TABLE IF NOT EXISTS push_sub (
+      endpoint TEXT PRIMARY KEY,
+      sub TEXT NOT NULL
+    );
   `);
 
   const count = (d.prepare("SELECT COUNT(*) AS c FROM exercises").get() as { c: number }).c;

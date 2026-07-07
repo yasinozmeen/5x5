@@ -27,6 +27,7 @@ jobs:
             -v /home/yasin/5x5-data:/data \
             -e APP_PASSWORD="${{ secrets.APP_PASSWORD }}" \
             -e AUTH_SECRET="${{ secrets.AUTH_SECRET }}" \
+            -e VAPID_PRIVATE_KEY="${{ secrets.VAPID_PRIVATE_KEY }}" \
             5x5:latest
 
       - name: Health check

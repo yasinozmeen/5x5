@@ -3,6 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { FullState } from "@/lib/logic";
+import {
+  pushAc,
+  pushDurumu,
+  pushIptal,
+  pushPlanla,
+  type PushDurum,
+} from "@/lib/push-client";
 
 const RIR_SECENEKLER = [0, 1, 2, 3, 4];
 
@@ -29,7 +36,16 @@ export default function Antrenman({ initial }: { initial: FullState }) {
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState(false);
   const [restTrigger, setRestTrigger] = useState(0);
+  const [pushDurum, setPushDurum] = useState<PushDurum>("default");
   const hareketRef = useRef<string | null>(initial.aktif?.hareket ?? null);
+
+  useEffect(() => {
+    setPushDurum(pushDurumu());
+  }, []);
+
+  async function bildirimAc() {
+    setPushDurum(await pushAc());
+  }
 
   // Hareket değişince son ağırlığı ve hedef tekrarı yükle (Sheets davranışı)
   useEffect(() => {
@@ -83,12 +99,23 @@ export default function Antrenman({ initial }: { initial: FullState }) {
           <h1 className="font-display text-3xl tracking-wide text-accent">5×5</h1>
           <span className="font-num text-sm text-muted">{bugunStr()}</span>
         </div>
-        <Link
-          href="/veri"
-          className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-muted transition-colors hover:text-ink"
-        >
-          Veri
-        </Link>
+        <div className="flex items-center gap-2">
+          {pushDurum !== "granted" && pushDurum !== "unsupported" && (
+            <button
+              onClick={bildirimAc}
+              className="rounded-lg border border-accent/50 bg-accent-soft px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-accent transition-colors hover:border-accent"
+              title="Dinlenme bitince arka planda bildirim al"
+            >
+              🔔 Bildirim
+            </button>
+          )}
+          <Link
+            href="/veri"
+            className="rounded-lg border border-line bg-surface px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.15em] text-muted transition-colors hover:text-ink"
+          >
+            Veri
+          </Link>
+        </div>
       </header>
 
       {/* ── Gün seçimi (B1 dropdown karşılığı) ── */}
@@ -399,10 +426,11 @@ function RestTimer({ trigger }: { trigger: number }) {
     if (savedStart > 0) {
       const elapsed = (Date.now() - savedStart) / 1000;
       if (elapsed < target * 60) {
-        // Sayaç hâlâ çalışıyor → geri yükle
+        // Sayaç hâlâ çalışıyor → geri yükle + push'u tazele
         finishedRef.current = false;
         setStartAt(savedStart);
         setNow(Date.now());
+        void pushPlanla(Math.round(target * 60 - elapsed));
       } else {
         // Süre dolmuş (alarm çoktan çaldı) → temizle
         localStorage.removeItem("restStartAt");
@@ -418,6 +446,7 @@ function RestTimer({ trigger }: { trigger: number }) {
     setStartAt(t);
     setNow(t);
     localStorage.setItem("restStartAt", String(t));
+    void pushPlanla(Math.round(targetMin * 60));
   }, [trigger]);
 
   // Sayaç çalışırken her 250ms'de bir güncelle
@@ -455,6 +484,12 @@ function RestTimer({ trigger }: { trigger: number }) {
     setTargetMin((m) => {
       const next = Math.max(REST_MIN_MIN, Math.round((m + delta) * 2) / 2);
       localStorage.setItem("restTargetMin", String(next));
+      // Sayaç çalışıyorsa arka plan bildirimini yeni kalan süreye göre kaydır
+      if (startAt !== null) {
+        const kalan = next * 60 - (Date.now() - startAt) / 1000;
+        if (kalan > 0) void pushPlanla(Math.round(kalan));
+        else void pushIptal();
+      }
       return next;
     });
   }
@@ -465,11 +500,13 @@ function RestTimer({ trigger }: { trigger: number }) {
     setStartAt(t);
     setNow(t);
     localStorage.setItem("restStartAt", String(t));
+    void pushPlanla(Math.round(targetMin * 60));
   }
 
   function kapat() {
     setStartAt(null);
     localStorage.removeItem("restStartAt");
+    void pushIptal();
   }
 
   if (!running) return null;
