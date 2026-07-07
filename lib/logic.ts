@@ -130,13 +130,16 @@ export function getBugunSetler(day: Day): Record<string, number> {
 export function getFullState() {
   const day = (getState("aktif_gun") || "A") as Day;
   const hareketIdx = parseInt(getState("aktif_hareket") || "1", 10);
-  const setNo = parseInt(getState("aktif_set") || "1", 10);
 
   const program = getProgram(day);
   const tamam = hareketIdx > program.length;
   const aktifHareket = tamam ? null : program[hareketIdx - 1];
   const def = aktifHareket ? getExercise(aktifHareket) : null;
   const bugunSetler = getBugunSetler(day);
+
+  // Aktif set numarasını state yerine bugünkü kayıtlardan türet — bozuk/eski
+  // state (ör. gün değişimi resetinden kalma) sayfa yenilenince kendini düzeltir.
+  const setNo = aktifHareket ? (bugunSetler[aktifHareket] ?? 0) + 1 : 0;
 
   return {
     day,
