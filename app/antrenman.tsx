@@ -387,10 +387,27 @@ function RestTimer({ trigger }: { trigger: number }) {
   const [now, setNow] = useState<number>(0);
   const finishedRef = useRef(false);
 
-  // İlk yüklemede kayıtlı hedef süreyi oku
+  // İlk yüklemede kayıtlı hedef süreyi + devam eden sayacı geri yükle.
+  // startAt localStorage'da tutulduğu için sayfa değişse (ör. Veri'ye gidip
+  // dönmek) component yeniden kurulunca sayaç kaldığı yerden devam eder.
   useEffect(() => {
-    const saved = Number(localStorage.getItem("restTargetMin"));
-    if (saved >= REST_MIN_MIN) setTargetMin(saved);
+    const savedTarget = Number(localStorage.getItem("restTargetMin"));
+    const target = savedTarget >= REST_MIN_MIN ? savedTarget : REST_DEFAULT_MIN;
+    if (savedTarget >= REST_MIN_MIN) setTargetMin(savedTarget);
+
+    const savedStart = Number(localStorage.getItem("restStartAt"));
+    if (savedStart > 0) {
+      const elapsed = (Date.now() - savedStart) / 1000;
+      if (elapsed < target * 60) {
+        // Sayaç hâlâ çalışıyor → geri yükle
+        finishedRef.current = false;
+        setStartAt(savedStart);
+        setNow(Date.now());
+      } else {
+        // Süre dolmuş (alarm çoktan çaldı) → temizle
+        localStorage.removeItem("restStartAt");
+      }
+    }
   }, []);
 
   // Set tamamlanınca (trigger değişince) sayacı başlat
@@ -400,6 +417,7 @@ function RestTimer({ trigger }: { trigger: number }) {
     const t = Date.now();
     setStartAt(t);
     setNow(t);
+    localStorage.setItem("restStartAt", String(t));
   }, [trigger]);
 
   // Sayaç çalışırken her 250ms'de bir güncelle
@@ -446,6 +464,12 @@ function RestTimer({ trigger }: { trigger: number }) {
     const t = Date.now();
     setStartAt(t);
     setNow(t);
+    localStorage.setItem("restStartAt", String(t));
+  }
+
+  function kapat() {
+    setStartAt(null);
+    localStorage.removeItem("restStartAt");
   }
 
   if (!running) return null;
@@ -469,7 +493,7 @@ function RestTimer({ trigger }: { trigger: number }) {
             {bitti ? "Dinlenme bitti" : "Dinlenme"}
           </div>
           <button
-            onClick={() => setStartAt(null)}
+            onClick={kapat}
             className="rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted transition-colors hover:text-ink"
           >
             Kapat
