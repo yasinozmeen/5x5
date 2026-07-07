@@ -28,6 +28,7 @@ export default function Antrenman({ initial }: { initial: FullState }) {
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState(false);
+  const [restTrigger, setRestTrigger] = useState(0);
   const hareketRef = useRef<string | null>(initial.aktif?.hareket ?? null);
 
   // Hareket değişince son ağırlığı ve hedef tekrarı yükle (Sheets davranışı)
@@ -67,6 +68,8 @@ export default function Antrenman({ initial }: { initial: FullState }) {
     await act({ action: "setTamamla", weight, reps, rir, note });
     setRir(null);
     setNote("");
+    // Set tamamlanınca dinlenme sayacını başlat
+    setRestTrigger((t) => t + 1);
   }
 
   const aktif = s.aktif;
@@ -317,7 +320,182 @@ export default function Antrenman({ initial }: { initial: FullState }) {
           Antrenmanı sıfırla
         </button>
       )}
+
+      {/* ── Dinlenme sayacı (set tamamlanınca başlar) ── */}
+      <RestTimer trigger={restTrigger} />
     </main>
+  );
+}
+
+/** Basit "beep" sesi — dinlenme bitince çalar. */
+function beep() {
+  try {
+    const Ctx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.6);
+    osc.onended = () => ctx.close();
+  } catch {
+    /* ses desteklenmiyorsa yok say */
+  }
+}
+
+const REST_DEFAULT_MIN = 2;
+const REST_STEP_MIN = 0.5;
+const REST_MIN_MIN = 0.5;
+
+function RestTimer({ trigger }: { trigger: number }) {
+  // Hedef süre — dakika. Kullanıcının son seçtiği değer localStorage'da saklanır.
+  const [targetMin, setTargetMin] = useState<number>(REST_DEFAULT_MIN);
+  const [startAt, setStartAt] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(0);
+  const finishedRef = useRef(false);
+
+  // İlk yüklemede kayıtlı hedef süreyi oku
+  useEffect(() => {
+    const saved = Number(localStorage.getItem("restTargetMin"));
+    if (saved >= REST_MIN_MIN) setTargetMin(saved);
+  }, []);
+
+  // Set tamamlanınca (trigger değişince) sayacı başlat
+  useEffect(() => {
+    if (trigger === 0) return; // ilk render'da başlatma
+    finishedRef.current = false;
+    const t = Date.now();
+    setStartAt(t);
+    setNow(t);
+  }, [trigger]);
+
+  // Sayaç çalışırken her 250ms'de bir güncelle
+  useEffect(() => {
+    if (startAt === null) return;
+    const id = setInterval(() => setNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [startAt]);
+
+  const running = startAt !== null;
+  const totalSec = Math.round(targetMin * 60);
+  const elapsed = running ? Math.floor((now - startAt) / 1000) : 0;
+  // Kalan süre hedeften türetildiği için hedef değişince ANINDA güncellenir
+  const remaining = Math.max(0, totalSec - elapsed);
+
+  // Bitiş algılama — kalan 0'a ulaşınca bir kez beep + titreşim
+  useEffect(() => {
+    if (!running) return;
+    if (remaining > 0) {
+      finishedRef.current = false;
+      return;
+    }
+    if (!finishedRef.current) {
+      finishedRef.current = true;
+      beep();
+      try {
+        navigator.vibrate?.([200, 100, 200]);
+      } catch {
+        /* yok say */
+      }
+    }
+  }, [running, remaining]);
+
+  function changeTarget(delta: number) {
+    setTargetMin((m) => {
+      const next = Math.max(REST_MIN_MIN, Math.round((m + delta) * 2) / 2);
+      localStorage.setItem("restTargetMin", String(next));
+      return next;
+    });
+  }
+
+  function restart() {
+    finishedRef.current = false;
+    const t = Date.now();
+    setStartAt(t);
+    setNow(t);
+  }
+
+  if (!running) return null;
+
+  const bitti = remaining === 0;
+  const mm = Math.floor(remaining / 60);
+  const ss = remaining % 60;
+  const hedefLabel = Number.isInteger(targetMin)
+    ? String(targetMin)
+    : targetMin.toFixed(1).replace(".", ",");
+
+  return (
+    <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+      <div
+        className={`w-full max-w-md rounded-2xl border bg-surface/95 p-4 shadow-[0_-8px_40px_rgba(0,0,0,0.5)] backdrop-blur md:max-w-2xl ${
+          bitti ? "border-ok/60" : "border-line"
+        }`}
+      >
+        <div className="flex items-center justify-between">
+          <div className="text-[10px] uppercase tracking-[0.2em] text-muted">
+            {bitti ? "Dinlenme bitti" : "Dinlenme"}
+          </div>
+          <button
+            onClick={() => setStartAt(null)}
+            className="rounded-md px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted transition-colors hover:text-ink"
+          >
+            Kapat
+          </button>
+        </div>
+
+        <div className="mt-2 flex items-center gap-3">
+          {/* Dakika azalt */}
+          <button
+            onClick={() => changeTarget(-REST_STEP_MIN)}
+            className="h-14 w-14 shrink-0 rounded-xl border border-line bg-surface-2 font-num text-2xl text-muted transition-colors active:bg-surface active:text-ink"
+            aria-label="Süreyi azalt"
+          >
+            −
+          </button>
+
+          {/* Kalan süre */}
+          <div className="flex-1 text-center">
+            <div
+              className={`font-num text-5xl font-bold leading-none tabular-nums ${
+                bitti ? "text-ok" : "text-accent"
+              }`}
+            >
+              {mm}:{String(ss).padStart(2, "0")}
+            </div>
+            <div className="mt-1 text-[11px] text-muted">Hedef: {hedefLabel} dk</div>
+          </div>
+
+          {/* Dakika artır */}
+          <button
+            onClick={() => changeTarget(REST_STEP_MIN)}
+            className="h-14 w-14 shrink-0 rounded-xl border border-line bg-surface-2 font-num text-2xl text-muted transition-colors active:bg-surface active:text-ink"
+            aria-label="Süreyi artır"
+          >
+            +
+          </button>
+        </div>
+
+        <button
+          onClick={restart}
+          className={`mt-3 w-full rounded-xl py-2.5 text-sm font-semibold uppercase tracking-[0.15em] transition-transform active:scale-[0.98] ${
+            bitti
+              ? "bg-ok text-black"
+              : "border border-line bg-surface-2 text-muted hover:text-ink"
+          }`}
+        >
+          {bitti ? "Tekrar Başlat" : "Yeniden Başlat"}
+        </button>
+      </div>
+    </div>
   );
 }
 
