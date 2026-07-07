@@ -86,9 +86,23 @@ export default function Veri({ initial }: { initial: SetRecord[] }) {
               </span>
               <span className="text-xs text-muted">{g.kayitlar[0].day}</span>
             </h2>
-            <ul className="divide-y divide-line">
-              {g.kayitlar.map((r) => (
-                <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
+            <ul>
+              {g.kayitlar.map((r, i) => {
+                // Bir önceki satır farklı hareketse belirgin ayraç + boşluk;
+                // aynı hareketin setleri arasında ince çizgi kalır.
+                const prev = i > 0 ? g.kayitlar[i - 1] : null;
+                const yeniHareket = prev !== null && prev.exercise !== r.exercise;
+                return (
+                <li
+                  key={r.id}
+                  className={`flex items-center gap-2 text-sm ${
+                    i === 0
+                      ? "pb-2"
+                      : yeniHareket
+                        ? "mt-2.5 border-t-2 border-white/15 pt-3 pb-2"
+                        : "border-t border-line pt-2 pb-2"
+                  }`}
+                >
                   <span className="font-num w-10 shrink-0 text-xs text-muted">
                     {r.ts.slice(11, 16)}
                   </span>
@@ -113,7 +127,8 @@ export default function Veri({ initial }: { initial: SetRecord[] }) {
                     Düzenle
                   </button>
                 </li>
-              ))}
+                );
+              })}
             </ul>
           </section>
         ))}
