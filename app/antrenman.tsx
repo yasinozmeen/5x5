@@ -63,6 +63,7 @@ export default function Antrenman({ initial }: { initial: FullState }) {
 
   async function tamamla() {
     if (!s.aktif) return;
+    unlockAudio(); // dokunuş anında ses kilidini aç — alarm sonra çalabilsin
     setFlash(true);
     setTimeout(() => setFlash(false), 250);
     await act({ action: "setTamamla", weight, reps, rir, note });
@@ -327,26 +328,49 @@ export default function Antrenman({ initial }: { initial: FullState }) {
   );
 }
 
-/** Basit "beep" sesi — dinlenme bitince çalar. */
-function beep() {
+// ── Ses motoru ────────────────────────────────────────────────
+// Tek bir paylaşılan AudioContext. Mobil tarayıcılar (özellikle iOS/PWA)
+// sesi yalnızca bir kullanıcı dokunuşu sırasında "uyandırılan" context ile
+// çalar; bu yüzden SET TAMAMLA'ya basınca unlockAudio() ile uyandırıyoruz,
+// alarm 2 dk sonra dokunuş olmadan çalabilsin diye.
+let _audio: AudioContext | null = null;
+
+function getAudioCtx(): AudioContext | null {
+  const Ctx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext })
+      .webkitAudioContext;
+  if (!Ctx) return null;
+  if (!_audio) _audio = new Ctx();
+  return _audio;
+}
+
+/** Kullanıcı dokunuşu anında çağrılır — ses kilidini açar. */
+function unlockAudio() {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === "suspended") ctx.resume();
+}
+
+/** Dinlenme bitince çalan alarm — 4 kez tekrarlayan belirgin bip. */
+function alarm() {
   try {
-    const Ctx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext })
-        .webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.6);
-    osc.connect(gain).connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.6);
-    osc.onended = () => ctx.close();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    if (ctx.state === "suspended") ctx.resume();
+    const t0 = ctx.currentTime;
+    for (let i = 0; i < 4; i++) {
+      const start = t0 + i * 0.35;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(0.4, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.25);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + 0.28);
+    }
   } catch {
     /* ses desteklenmiyorsa yok say */
   }
@@ -400,9 +424,9 @@ function RestTimer({ trigger }: { trigger: number }) {
     }
     if (!finishedRef.current) {
       finishedRef.current = true;
-      beep();
+      alarm();
       try {
-        navigator.vibrate?.([200, 100, 200]);
+        navigator.vibrate?.([400, 150, 400, 150, 400]);
       } catch {
         /* yok say */
       }
