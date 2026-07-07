@@ -177,21 +177,43 @@ export type FullState = ReturnType<typeof getFullState>;
 
 // ── Eylemler ──────────────────────────────────────────────────
 
+// Bir günün bugünkü kayıtlarından aktif konumu (hareket + set) türetir.
+// İlk, hedef set sayısına ulaşmamış hareket aktif olandır; kaldığı setten devam eder.
+// Hepsi tamamsa hareketIdx program+1 (= ANTRENMAN TAMAM) döner.
+function bugunkuIlerleme(day: Day): { hareketIdx: number; setNo: number } {
+  const program = getProgram(day);
+  const bugunSetler = getBugunSetler(day);
+  for (let i = 0; i < program.length; i++) {
+    const yapilan = bugunSetler[program[i]] ?? 0;
+    const def = getExercise(program[i]);
+    if (yapilan < def.target_sets) {
+      return { hareketIdx: i + 1, setNo: yapilan + 1 };
+    }
+  }
+  return { hareketIdx: program.length + 1, setNo: 0 };
+}
+
 // Gün seçimi (Sheets gunSec karşılığı)
+// Konumu sıfırlamaz — o günün bugünkü ilerlemesini geri yükler.
 export function gunSec(day: Day) {
   setState("aktif_gun", day);
-  setState("aktif_hareket", "1");
-  setState("aktif_set", "1");
+  const { hareketIdx, setNo } = bugunkuIlerleme(day);
+  setState("aktif_hareket", String(hareketIdx));
+  setState("aktif_set", String(setNo));
 }
 
 // Hareket seçimi (Sheets hareketSec karşılığı)
+// Seçilen hareketin bugün kaldığı setten devam eder (s1'den değil).
 export function hareketSec(exercise: string) {
   const day = (getState("aktif_gun") || "A") as Day;
   const program = getProgram(day);
   const idx = program.indexOf(exercise);
   if (idx === -1) return;
+  const def = getExercise(exercise);
+  const yapilan = getBugunSetler(day)[exercise] ?? 0;
+  const setNo = Math.min(yapilan, def.target_sets - 1) + 1;
   setState("aktif_hareket", String(idx + 1));
-  setState("aktif_set", "1");
+  setState("aktif_set", String(setNo));
 }
 
 // Set tamamlama (Sheets setTamamla + kaydet + sonrakiHareket karşılığı)
